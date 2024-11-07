@@ -1,2 +1,8 @@
+# VS Code
 .vscode/
+
+# Executables
 bin/
+
+# GNU Debugger
+.gdb*
