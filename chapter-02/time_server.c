@@ -1,80 +1,69 @@
 /* time_server.c */
 
-// Platform-specific preprocessor directives
-
-// If the program is being compiled on Windows
-#if defined(_WIN32)
+// Preprocessor directives to bridge Windows and UNIX-like systems
+#if defined(_WIN32) // If the program is being compiled on Windows
+// To cater for obsolete Windows missing (previous to Vista)
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0600// Target Windows version is Vista or higher
+#define _WIN32_WINNT 0x0600
 #endif
-#include <winsock2.h>  // Windows Sockets API
-#include <ws2tcpip.h>  // Extensions for modern IP and DNS support
-#pragma comment(lib, "ws2_32.lib")  // Link the Winsock library during compilation
 
-#else  // If the program is being compiled on a UNIX-like system (Linux, macOS, etc.)
-#include <sys/types.h>  // Defines data types used in system calls
-#include <sys/socket.h>  // Socket-related functions
-#include <netinet/in.h>  // Structures for handling internet addresses
+#include <winsock2.h> // Windows Sockets API
+#include <ws2tcpip.h> // Extensions for modern IP and DNS support
+#pragma comment(lib, "ws2_32.lib")
+
+#else
 #include <arpa/inet.h>  // Functions for working with IP addresses
-#include <netdb.h>  // DNS-related functions
-#include <unistd.h>  // UNIX standard functions (e.g., close)
-#include <errno.h>  // Error handling
-
+#include <errno.h>      // Error handling
+#include <netdb.h>      // DNS-related functions
+#include <netinet/in.h> // Structures for handling internet addresses
+#include <sys/socket.h> // Socket-related functions
+#include <sys/types.h>  // Defines data types used in system calls
+#include <unistd.h>     // UNIX standard functions (e.g., close)
 #endif
 
-// Platform-specific macros to handle differences between Windows and UNIX-like systems
+// Platform-specific macros to bridge Windows and UNIX-like systems
+#if defined(_WIN32) // Windows-specific definitions
+#define ISVALIDSOCKET(s) ((s) != INVALID_SOCKET)
+#define CLOSESOCKET(s) closesocket(s) // Close a socket on Windows
+#define GETSOCKETERRNO() (WSAGetLastError())
 
-#if defined(_WIN32)  // Windows-specific definitions
-#define ISVALIDSOCKET(s) ((s) != INVALID_SOCKET)  // Check if a socket is valid on Windows
-#define CLOSESOCKET(s) closesocket(s)  // Close a socket on Windows
-#define GETSOCKETERRNO() (WSAGetLastError())  // Get the last error code on Windows
-
-#else  // UNIX-specific definitions
-#define ISVALIDSOCKET(s) ((s) >= 0)  // Check if a socket is valid on UNIX
-#define CLOSESOCKET(s) close(s)  // Close a socket on UNIX
-#define SOCKET int  // Sockets are just file descriptors (int) on UNIX
-#define GETSOCKETERRNO() (errno)  // Get the last error code on UNIX
-
+#else                               // UNIX-specific definitions
+#define ISVALIDSOCKET(s) ((s) >= 0) // Check if a socket is valid on UNIX
+#define CLOSESOCKET(s) close(s)     // Close a socket on UNIX
+#define SOCKET int // Sockets are just file descriptors (int) on UNIX
+#define GETSOCKETERRNO() (errno) // Get the last error code on UNIX
 #endif
 
+// Standard C library headers
 #include <stdio.h>  // Standard input/output
-#include <string.h>  // String manipulation
-#include <time.h>  // Time-related functions
-#include <stdlib.h>  // Standard library functions (e.g., exit)
+#include <stdlib.h> // Standard library functions (e.g., exit)
+#include <string.h> // String manipulation
+#include <time.h>   // Time-related functions
 
-
-/**
- * The main function configures a local address and port for the server, binds a
- * socket to it, listens for incoming connections, accepts a connection, reads a
- * request from the client, sends back a response with the current local time,
- * and closes the connection.
- *
- * @return EXIT_SUCCESS on successful completion, EXIT_FAILURE otherwise.
- */
+// Main function
 int main(void) {
-
-
-#if defined(_WIN32)  // Windows-specific initialization
-  WSADATA d;  // Structure to hold Windows Sockets data
-  if (WSAStartup(MAKEWORD(2, 2), &d)) {  // Initialize Winsock version 2.2
+#if defined(_WIN32) // Windows-specific initialization
+  WSADATA d;        // Structure to hold Windows Sockets data
+  if (WSAStartup(MAKEWORD(2, 2), &d)) { // Initialize Winsock version 2.2
     fprintf(stderr, "Failed to initialize.\n");
     return 1;
   }
 #endif
 
   printf("Configuring local address...\n");
-  struct addrinfo hints;  // Hints for address configuration
-  memset(&hints, 0, sizeof(hints));  // Zero out the structure
-  hints.ai_family = AF_INET;  // IPv4 family
+  struct addrinfo hints;            // Hints for address configuration
+  memset(&hints, 0, sizeof(hints)); // Zero out the structure
+  hints.ai_family = AF_INET;        // IPv4 family
   hints.ai_socktype = SOCK_STREAM;  // Stream socket (TCP)
-  hints.ai_flags = AI_PASSIVE;  // Bind to any available address
-
-  struct addrinfo *bind_address;  // Pointer to store address information
-  getaddrinfo(0, "80", &hints, &bind_address);  // Get local address info for port 80 (HTTP)
+  hints.ai_flags = AI_PASSIVE;      // Bind to any available address
+  struct addrinfo *bind_address;    // Pointer to store address information
+  getaddrinfo(0, "8080", &hints,
+              &bind_address); // Get local address info for port 80 (HTTP)
 
   printf("Creating socket...\n");
   SOCKET socket_listen;
-  socket_listen = socket(bind_address->ai_family, bind_address->ai_socktype, bind_address->ai_protocol);
+  socket_listen = socket(bind_address->ai_family, bind_address->ai_socktype,
+                         bind_address->ai_protocol);
   if (!ISVALIDSOCKET(socket_listen)) {
     fprintf(stderr, "socket() failed. (%d)\n", GETSOCKETERRNO());
     return EXIT_FAILURE;
@@ -95,23 +84,27 @@ int main(void) {
   }
 
   printf("Waiting for connection...\n");
-  struct sockaddr_storage client_address;  // Structure to hold the client's address
-  socklen_t client_len = sizeof(client_address);  // Length of the client's address
+  struct sockaddr_storage
+      client_address; // Structure to hold the client's address
+  socklen_t client_len =
+      sizeof(client_address); // Length of the client's address
   // Blocking call to accept an incoming connection
-  SOCKET socket_client = accept(socket_listen, (struct sockaddr*) &client_address, &client_len);
+  SOCKET socket_client =
+      accept(socket_listen, (struct sockaddr *)&client_address, &client_len);
   if (!ISVALIDSOCKET(socket_client)) {
     fprintf(stderr, "accept() failed. (%d)\n", GETSOCKETERRNO());
     return EXIT_FAILURE;
   }
 
   printf("Client is connected... ");
-  char address_buffer[100];  // Buffer to hold the client's address as a string
+  char address_buffer[100]; // Buffer to hold the client's address as a string
   // Get the client's IP address
-  getnameinfo((struct sockaddr*)&client_address, client_len, address_buffer, sizeof(address_buffer), 0, 0, NI_NUMERICHOST);
-  printf("%s\n", address_buffer);  // Print the client's IP address
+  getnameinfo((struct sockaddr *)&client_address, client_len, address_buffer,
+              sizeof(address_buffer), 0, 0, NI_NUMERICHOST);
+  printf("%s\n", address_buffer); // Print the client's IP address
 
   printf("Reading request...\n");
-  char request[1024];  // Buffer to store the client's request
+  char request[1024]; // Buffer to store the client's request
   // Receive data from the client
   int bytes_received = recv(socket_client, request, 1024, 0);
   // Print how many bytes were received
@@ -119,7 +112,6 @@ int main(void) {
   // Print the received request
   printf("%.*s", bytes_received, request);
 
-  
   printf("Sending response...\n");
   // Prepare an HTTP response headers and introduce response body
   const char *response = "HTTP/1.1 200 OK\r\n"
@@ -140,9 +132,8 @@ int main(void) {
   // Print how many bytes were sent
   printf("Sent %d of %d bytes.\n", bytes_sent, (int)strlen(time_msg));
 
-
   printf("Closing connection...\n");
-  // Close the client's socket for the browser to keep waiting until times out
+  // Close the client's socket for the browser not to keep waiting until times out
   CLOSESOCKET(socket_client);
 
   // At this point a production server would accept additional connections by
@@ -150,13 +141,13 @@ int main(void) {
   // printf("Waiting for next connection...\n");
 
   printf("Closing listening socket...\n");
-  CLOSESOCKET(socket_listen);  // Close the listening socket
+  CLOSESOCKET(socket_listen); // Close the listening socket
 
 #if defined(_WIN32)
-  WSACleanup();  // Clean up Winsock on Windows
+  WSACleanup(); // Clean up Winsock on Windows
 #endif
 
   printf("Finished.\n");
 
-  return EXIT_SUCCESS;  // Exit successfully
+  return EXIT_SUCCESS; // Exit successfully
 }
