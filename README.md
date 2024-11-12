@@ -46,3 +46,111 @@ The `print_name` function processes a DNS name, which can either:
 ### Summary
 - In the pointer-handling block, recursion is used purely for printing and does not affect the continuation point of `p`, so the function returns `p` after handling the pointer.
 - In the non-pointer block, recursion is part of the parsing logic, so the return value is passed back up to maintain the correct parsing position in the DNS message.
+
+## Unsafe Re-Entrancy
+
+```c
+const char *get_client_address(CLIENTINFO *client) {
+  static char address_buffer[100];
+  getnameinfo((struct sockaddr *)&client->address, client->address_length,
+              address_buffer, sizeof(address_buffer), NULL, 0, NI_NUMERICHOST);
+  return address_buffer;
+}
+```
+
+This `char` array is declared `static`, which ensures that its memory is available after the function returns. This means that we don't need to worry about having the caller `free()` the memory. The downside to this method is because of `get_client_address()` current global state it is not re-entrant-safe:
+
+### Purpose of `static`:
+
+1. **Persistent Storage**:
+   ```c
+   static char address_buffer[100];
+   ```
+   The `static` keyword makes `address_buffer` retain its value between function calls. This means that the buffer is allocated only once and persists for the lifetime of the program, rather than being allocated and deallocated each time the function is called.
+
+### How It Relieves the Caller from Calling `free()`:
+
+- **Automatic Memory Management**: Since `address_buffer` is statically allocated, the caller does not need to allocate or free memory for the returned string. The buffer is managed by the function itself, simplifying the caller's code and avoiding potential memory leaks.
+
+### Why It Is Not Re-entrant-safe:
+
+- **Shared State**: The use of a static buffer means that all calls to `get_client_address` share the same buffer. If the function is called concurrently (e.g., from multiple threads), or if it is called again before the previous call's result is used, the buffer's contents can be overwritten, leading to incorrect or unpredictable results.
+
+### Example of Re-entrancy Issue:
+
+Consider the following scenario:
+
+```c
+const char *addr1 = get_client_address(client1);
+const char *addr2 = get_client_address(client2);
+printf("Client 1: %s\n", addr1);
+printf("Client 2: %s\n", addr2);
+```
+
+In this case, `addr1` and `addr2` will both point to the same `address_buffer`, and the second call to `get_client_address` will overwrite the buffer, causing both `addr1` and `addr2` to contain the address of `client2`.
+
+### Making It Re-entrant-safe:
+
+To make the function re-entrant-safe, you could allocate memory dynamically and let the caller manage it:
+
+```c
+char *get_client_address(CLIENTINFO *client) {
+    char *address_buffer = malloc(100);
+    if (address_buffer == NULL) {
+        return NULL; // Handle allocation failure
+    }
+    getnameinfo((struct sockaddr *)&client->address, client->address_length,
+                address_buffer, 100, NULL, 0, NI_NUMERICHOST);
+    return address_buffer;
+}
+
+// Caller must free the returned buffer
+char *address = get_client_address(client);
+if (address) {
+    printf("Client address: %s\n", address);
+    free(address);
+}
+```
+
+In this version, each call to `get_client_address` returns a new buffer that the caller is responsible for freeing, ensuring that the function is re-entrant-safe.
+
+>**IMPORTANT** The free function does not require the size of the allocated memory to be passed explicitly. The memory allocation system keeps track of the size of each allocated block internally. When you call free, it uses this internal information to correctly deallocate the memory.
+
+
+## Memory management: Memory leak
+
+### Why is `bind_address` memory freed but not `hints`'s ?
+
+```c
+SOCKET create_socket(const char *host, const char *port) {
+  // Configure local address the server is listening on
+  printf("Configuring local address...\n");
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_PASSIVE;
+
+  struct addrinfo *bind_address;
+  getaddrinfo(host, port, &hints, &bind_address);
+
+  // Create socket
+  // ...
+  // Bind socket to local address
+  // ...
+  freeaddrinfo(bind_address);
+  // Put socket into listening mode
+  // ...
+  return socket_listen;
+}
+```
+
+Great question! The reason you need to free the memory for `bind_address` but not for `hints` lies in how memory is allocated and managed for these structures.
+
+1. **`hints` Structure**: This structure is allocated on the stack. When you declare `struct addrinfo hints;`, the memory for `hints` is automatically managed by the system. It is freed when the function `create_socket` returns, so you don't need to explicitly free it.
+
+2. **`bind_address` Structure**: This structure is allocated on the heap by the `getaddrinfo` function. When you call `getaddrinfo`, it dynamically allocates memory for the `bind_address` linked list. Since this memory is allocated on the heap, you must explicitly free it using `freeaddrinfo` to avoid memory leaks¹³.
+
+Here's a brief summary:
+- **Stack Allocation**: Automatically managed, no need to free manually (e.g., `hints`).
+- **Heap Allocation**: Must be manually freed to avoid memory leaks (e.g., `bind_address`).

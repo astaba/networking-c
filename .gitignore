@@ -4,5 +4,8 @@
 # Executables
 bin/
 
+# Test
+public/
+
 # GNU Debugger
 .gdb*
