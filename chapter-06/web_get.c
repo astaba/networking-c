@@ -251,7 +251,7 @@ void parse_url(char *url, char **hostname, char **port, char **path) {
   // Print out returned values for debugging purposes
   printf("hostname: %s\n", *hostname);
   printf("port: %s\n", *port);
-  printf("path: %s%s\n", **path ? "/" : "", *path);
+  printf("path: %s\n", *path);
 }
 
 /**
