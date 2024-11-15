@@ -6,6 +6,7 @@ bin/
 
 # Test
 public/
+private/
 
 # GNU Debugger
 .gdb*
