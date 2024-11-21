@@ -3,8 +3,7 @@
  * @brief A simple UDP client that sends data to a server.
  */
 
-#include "../mylib/omniplat.h"
-#include <stdlib.h>
+#include "chap04.h"
 
 /**
  * @brief Main function to set up and run the UDP client.

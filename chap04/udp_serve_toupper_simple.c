@@ -7,9 +7,8 @@
  * and sends them back to the sender.
  */
 
-#include "../mylib/omniplat.h"
+#include "chap04.h"
 #include <ctype.h>
-#include <stdlib.h>
 
 int main(void) {
 

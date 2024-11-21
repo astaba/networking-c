@@ -1,7 +1,6 @@
 /* udp_client.c */
 
-#include "../mylib/omniplat.h"
-#include <stdlib.h>
+#include "chap04.h"
 
 // Required on Windows for _kbhit() to indicate terminal input is waiting
 #if defined(_WIN32)
