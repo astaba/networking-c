@@ -6,8 +6,7 @@
  * each of them. It also indicates any errors.
  * */
 
-#include "../mylib/omniplat.h"
-#include <stdlib.h>
+#include "chap05.h"
 
 #ifndef AI_ALL
 #define AI_ALL 0x0100
