@@ -1,8 +1,6 @@
 /* web_get.c */
 
-#include "../mylib/omniplat.h"
-#include <stdlib.h>
-#include <time.h>
+#include "chap06.h"
 
 #define TIMEOUT 5.0
 
@@ -20,11 +18,16 @@ SOCKET connect_to_host(char *hostname, char *port);
  * */
 int main(int argc, char *argv[]) {
 
-#if defined(_WIN32)
-  WSADATA d;
-  if (WSAStartup(MAKEWORD(2, 2), &d)) {
-    fprintf(stderr, "Failed to initialize.\n");
-    return 1;
+#ifdef _WIN32
+  WSADATA WSAData;
+  int wVersionRequested = MAKEWORD(2, 2);
+  unsigned int wsaerr = WSAStartup(wVersionRequested, &WSAData);
+  if (wsaerr) {
+    fprintf(stderr, "Failed to initialize Winsock. The dll not found.\n");
+    exit(EXIT_SUCCESS);
+  } else {
+    printf("The dll found.\n");
+    printf("Winsock Status: %s.\n", WSAData.szSystemStatus);
   }
 #endif
 
@@ -44,21 +47,33 @@ int main(int argc, char *argv[]) {
   // Set timeout start
   const clock_t start_time = clock();
 // Define variables for bookkeeping while receiving and parsing HTTP response.
-/* #define RESPONSE_SIZE (8 * 1024) */
-#define RESPONSE_SIZE (32 * 1024)
-  char response[RESPONSE_SIZE + 1];
-  char *p = response;
-  char *q;
-  char *end = response + RESPONSE_SIZE;
-  char *body = 0;
-
-  // If you recall, the HTTP response body length can be determined by a few
-  // different methods. We define an enumeration to list the method types, and
-  // we define the "encoding" variable to store the actual method used. Finally,
-  // the "remaining" variable is used to record how many bytes are still needed
-  // to finish the HTTP body or body chunk.
-  enum { length, chunked, connection };
-  int encoding = 0;
+/* #define RESPONSE_8K (8 * 1024) */
+#define RESPONSE_32K (32 * 1024)
+  /* Statically point to the beginning of the buffer the server response is
+   * recursively read into by split TCP packet (over server chunks). */
+  char *response = (char *)calloc((RESPONSE_32K + 1), sizeof(char));
+  if (!response) {
+    perror("Memory allocation failed.");
+    exit(EXIT_FAILURE);
+  }
+  /* Dynamically tracks how far TCP split packets, from recv(), have been
+   * concatenated into the response buffer. */
+  char *pkt = response;
+  /* Helper pointer to locate critical meta-data within each packet and
+   * dynamically update the position of the remaining body chunks to read */
+  char *meta = NULL;
+  /* Statically point to the last unused byte in the response buffer */
+  char *end = response + RESPONSE_32K;
+  /* Dynamically tracks the changing position to read the response body, once
+   * per chunk or length */
+  char *body = NULL;
+  /* If you recall, the HTTP response body length can be determined by a few
+   * different methods. We define an enumeration to list the method types, and
+   * we define the "encoding" variable to store the actual method used. */
+  typedef enum { length, chunked, connectionClosed } BodyLenghtEncoding;
+  BodyLenghtEncoding encoding = 0;
+  /* Records how many bytes are still needed to finish the HTTP body or body
+   * chunk */
   int remaining = 0;
 
   // Start the loop to receive and process HTTP response
@@ -67,7 +82,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "timeout after %.2f seconds\n", TIMEOUT);
       return EXIT_FAILURE;
     }
-    if (p == end) {
+    if (pkt == end) {
       fprintf(stderr, "out of buffer space\n");
       return EXIT_FAILURE;
     }
@@ -87,11 +102,17 @@ int main(int argc, char *argv[]) {
 
     // Read in new data and detect closed connection
     if (FD_ISSET(server, &readfds)) {
-      int bytes_received = recv(server, p, end - p, 0);
-      if (bytes_received < 1) {
-        if (encoding == connection && body) {
+      int b8_rcvd = recv(server, pkt, end - pkt, 0);
+      if (b8_rcvd < 1) {
+        if (encoding == connectionClosed && body) {
           printf("%.*s", (int)(end - body), body);
         }
+        /* Actually the next statement is a lame justification to the fact that
+         * this client is the one who intend on shutting down the connection
+         * because it doesn't support body length indicator other than
+         * 'Content-Length' and 'Transfer-Encoding', consequently, as a result
+         * of the 'Connection: close' request header the server will immediately
+         * close the connection. */
         printf("\nConnection closed by peer.\n");
         break;
       }
@@ -104,33 +125,38 @@ int main(int argc, char *argv[]) {
        * packets or be delivered all at once, depending on network conditions,
        * buffer sizes, and other factors. But the full message will eventually
        * arrive intact and in the correct order. */
-      /* printf("\nReceived Data (%d bytes) ->>\n%.*s\n<<-\n", bytes_received,
-             bytes_received, p); */
+      printf("\nReceived Data (%d bytes) ->>%.*s<<-\n", b8_rcvd, b8_rcvd, pkt);
 
-      p += bytes_received;
-      *p = 0;
+      pkt += b8_rcvd;
+      *pkt = 0;
 
       // Search for the end of the HTTP headers or beginning of HTTP body
-      if (!body && (body = strstr(response, "\r\n\r\n"))) {
-        *body = 0;
-        body += 4;
+      char *headers_end = "\r\n\r\n";
+      if (!body && (meta = strstr(response, headers_end))) {
+        *meta = 0;
+        body = meta + strlen(headers_end);
         printf("\nReceived Headers:\n%s\n", response);
 
         // Determine which body length method is used.
-        char *content_length_hdr = "\nContent-Length:";
-        q = strstr(response, content_length_hdr);
-        if (q) {
+        char *content_length = "\nContent-Length:";
+        meta = strstr(response, content_length);
+        if (meta) {
           encoding = length;
-          q += strlen(content_length_hdr);
-          remaining = strtol(q, 0, 10);
+          meta += strlen(content_length);
+          remaining = strtol(meta, 0, 10);
 
         } else {
-          q = strstr(response, "\nTransfer-Encoding: chunked");
-          if (q) {
+          meta = strstr(response, "\nTransfer-Encoding: chunked");
+          if (meta) {
             encoding = chunked;
             remaining = 0;
-          } else
-            encoding = connection;
+          } else {
+            /* If the server doesn't send either way of indicating body length,
+             * then we assume that the entire HTTP body has been received once
+             * the connection is closed without further parsing as warned in the
+             * request Connection header. */
+            encoding = connectionClosed;
+          }
         }
         printf("\nReceived Body:\n");
 
@@ -138,7 +164,7 @@ int main(int argc, char *argv[]) {
 
       if (body) {
         if (encoding == length) {
-          if (p - body >= remaining) {
+          if (pkt - body >= remaining) {
             printf("%.*s", remaining, body);
             break;
           }
@@ -146,28 +172,30 @@ int main(int argc, char *argv[]) {
         } else if (encoding == chunked) {
           do {
             if (remaining == 0) {
-              if ((q = strstr(body, "\r\n"))) {
+              if ((meta = strstr(body, "\r\n"))) {
                 remaining = strtol(body, 0, 16);
                 if (!remaining)
                   goto finish;
-                body = q + 2;
+                body = meta + 2;
               } else
+                /* Then the received chunk doesn't have any line with hexa
+                 * number and we need to break out to call recv() again */
                 break;
             }
-            if (remaining && p - body >= remaining) {
+            if (remaining && pkt - body >= remaining) {
               printf("%.*s", remaining, body);
               body += remaining + 2;
               remaining = 0;
             }
-          } while (!remaining);
+          } while (!remaining); // if not go call recv() again
         } // else if (encoding == chunked)
       } // if (body)
     } // if (FD_ISSET(server, &readfds))
   } // while(1)
-
 finish:
 
   // Cleanup routines
+  free(response);
   printf("\nClosing socket...\n");
   CLOSESOCKET(server);
 
@@ -195,7 +223,7 @@ finish:
  */
 void parse_url(char *url, char **hostname, char **port, char **path) {
   // For debugging purposes, optionally printf the URL.
-  printf("URL: %s\n", url);
+  printf("%8s:\t%s\n", "URL", url);
 
   // parse the protocol
   char *scheme_separator = "://";
@@ -240,7 +268,7 @@ void parse_url(char *url, char **hostname, char **port, char **path) {
   *path = p;
   if (*p == '/')
     *path = p + 1;
-  *p = 0;
+  *p++ = 0;
 
   // Check for hash and ignore it since it is never sent to the web server
   while (*p && *p != '#')
@@ -249,9 +277,9 @@ void parse_url(char *url, char **hostname, char **port, char **path) {
     *p = 0;
 
   // Print out returned values for debugging purposes
-  printf("hostname: %s\n", *hostname);
-  printf("port: %s\n", *port);
-  printf("path: %s\n", *path);
+  printf("%8s:\t%s\n", "Hostname", *hostname);
+  printf("%8s:\t%s\n", "Port", *port);
+  printf("%8s:\t%s\n\n", "Path", *path);
 }
 
 /**
