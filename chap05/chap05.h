@@ -2,7 +2,7 @@
 
 #if defined(_WIN32) // If compiling on Windows
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0600// Target Windows version is Vista or higher
+#define _WIN32_WINNT 0x0600 // Target Windows version is Vista or higher
 #endif
 #include <winsock2.h> // Windows Sockets API
 #include <ws2tcpip.h> // Extensions for modern IP and DNS support
@@ -10,13 +10,13 @@
 #pragma comment(lib, "ws2_32.lib")
 
 #else // Then compiling on UNIX-like system (Linux, macOS, etc.)
-#include <arpa/inet.h> // Functions for working with IP addresses
-#include <errno.h> // Error handling
-#include <netdb.h> // DNS-related functions
+#include <arpa/inet.h>  // Functions for working with IP addresses
+#include <errno.h>      // Error handling
+#include <netdb.h>      // DNS-related functions
 #include <netinet/in.h> // Structures for handling internet addresses
 #include <sys/socket.h> // Socket-related functions
-#include <sys/types.h> // Defines data types used in system calls
-#include <unistd.h> // UNIX-specific functions (e.g., close)
+#include <sys/types.h>  // Defines data types used in system calls
+#include <unistd.h>     // UNIX-specific functions (e.g., close)
 #endif
 
 // Platform-specific macros to bridge Windows and UNIX-like systems
@@ -34,6 +34,5 @@
 
 // Standard C library headers
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
-
+#include <string.h>

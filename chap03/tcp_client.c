@@ -10,13 +10,12 @@
 /**
  * @brief Entry point of the TCP client application.
  *
- * This function initializes the Winsock library (on Windows), validates
- * command-line arguments, and establishes a TCP connection to the specified
- * remote host and port. It uses the `select()` function for I/O multiplexing,
- * allowing the program to handle both sending and receiving data asynchronously
- * from the command line and through the peer socket. The function will
- * continuously prompt the user for input to send to the connected server and
- * will display any received messages from the server.
+ * This function establishes a TCP connection to the specified remote host and
+ * port. It uses the `select()` function for I/O multiplexing, allowing the
+ * program to handle both sending and receiving data synchronously from the
+ * command line and through the peer socket. The function will continuously
+ * prompt the user for input to send to the connected server and will display
+ * any received messages from the server.
  *
  * @param argc Number of command-line arguments.
  * @param argv Array of command-line arguments, where argv[1] is the hostname
