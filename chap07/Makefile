@@ -8,7 +8,8 @@ TARGET=file_to_debug
 
 .PHONY: all clean debug
 
-all: $(BINR)/web_server.alt $(BINR)/web_server $(BINR)/web_server2
+all: $(BINR)/web_server.alt $(BINR)/web_server $(BINR)/web_server2 \
+	$(BINR)/web_server_prac $(BINR)/web_server2_prac
 
 clean:
 	rm -rfv $(BINR)/*
@@ -20,6 +21,12 @@ $(BINR)/web_server: web_server.c $(DEPS)
 	gcc $< -o $@ $(CFLAGS)
 
 $(BINR)/web_server2: web_server2.c $(DEPS)
+	gcc $< -o $@ $(CFLAGS)
+
+$(BINR)/web_server_prac: web_server_prac.c $(DEPS)
+	gcc $< -o $@ $(CFLAGS)
+
+$(BINR)/web_server2_prac: web_server2_prac.c $(DEPS)
 	gcc $< -o $@ $(CFLAGS)
 
 debug:

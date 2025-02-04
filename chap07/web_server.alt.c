@@ -170,6 +170,13 @@ int main(void) {
   return EXIT_SUCCESS;
 }
 
+const char *get_client_address(client_info *client) {
+  static char address_buffer[100];
+  getnameinfo((struct sockaddr *)&client->address, client->address_length,
+              address_buffer, sizeof(address_buffer), NULL, 0, NI_NUMERICHOST);
+  return address_buffer;
+}
+
 client_info *get_client(SOCKET socket) {
   client_info *client = clients;
   while (client) {
@@ -189,29 +196,6 @@ client_info *get_client(SOCKET socket) {
   return client;
 }
 
-void drop_client(client_info *client) {
-  CLOSESOCKET(client->socket);
-  client_info **ptr = &clients;
-  while (*ptr) {
-    if (*ptr == client) {
-      *ptr = client->next;
-      free(client);
-      return;
-    }
-    ptr = &(*ptr)->next;
-  }
-
-  fprintf(stderr, "drop_client not found.\n");
-  exit(EXIT_FAILURE);
-}
-
-const char *get_client_address(client_info *client) {
-  static char address_buffer[100];
-  getnameinfo((struct sockaddr *)&client->address, client->address_length,
-              address_buffer, sizeof(address_buffer), NULL, 0, NI_NUMERICHOST);
-  return address_buffer;
-}
-
 void send_400(client_info *client) {
   const char *buf_400 = "HTTP/1.1 400 Bad Request\r\n"
                         "Connection: close\r\n"
@@ -228,6 +212,22 @@ void send_404(client_info *client) {
                         "Not Found";
   send(client->socket, buf_404, strlen(buf_404), 0);
   drop_client(client);
+}
+
+void drop_client(client_info *client) {
+  CLOSESOCKET(client->socket);
+  client_info **ptr = &clients;
+  while (*ptr) {
+    if (*ptr == client) {
+      *ptr = client->next;
+      free(client);
+      return;
+    }
+    ptr = &(*ptr)->next;
+  }
+
+  fprintf(stderr, "drop_client not found.\n");
+  exit(EXIT_FAILURE);
 }
 
 void serve_resource(client_info *client, const char *path) {

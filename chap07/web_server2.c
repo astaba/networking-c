@@ -34,7 +34,7 @@ int main(void) {
   }
 #endif
 
-  SOCKET server = create_socket(0, "3157");
+  SOCKET server = create_socket(0, "3158");
 
   client_info *clients_head = 0;
   // Main loop

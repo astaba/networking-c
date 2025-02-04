@@ -79,6 +79,7 @@ int main(void) {
       if (FD_ISSET(client->socket, &readfds)) {
         if (MAX_REQUEST_SIZE == client->received) {
           send_400(client);
+          client = next;
           continue;
         }
 
@@ -397,6 +398,14 @@ void serve_resource(client_info *client, const char *path) {
   if (strstr(path, "..")) {
     send_404(client);
     return;
+  }
+
+  // Parse out the query string
+  char *query_string = strchr(path, '?');
+  if (query_string) {
+    *query_string = '\0';
+    query_string++; // Optionally use the query string
+    // TEST: printf("Query string: %s\n", query_string);
   }
 
   // Convert path to refer to files in the public directory
