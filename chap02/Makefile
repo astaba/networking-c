@@ -1,36 +1,57 @@
 # Make sure bin subfolder exists in the working directory
-BINR=./bin
-CFLAGS=-Wall -Wextra -I .
-DBGFLAGS=-g3 -O0 -DDEBUG
-LIBS=
-DEPS=chap02.h
-TARGET=file_to_debug
+CFLAGS= -Wall -Wextra
+GDBFLAGS= -g3 -O0 -DDEBUG
+HDR_F = chap02.h
 
-.PHONY: all clean debug
+SRC = sock_init.c \
+	time_console.c \
+	time_server.c \
+	time_server_dual.c \
+	time_server_ipv6.c \
+	time_console_inetd.c
+EXECS = $(SRC:.c=.out)
+DEBUG = $(SRC:.c=_dbg.out)
 
-all: $(BINR)/sock_init $(BINR)/time_console $(BINR)/time_server \
-	$(BINR)/time_server_dual $(BINR)/time_server_ipv6 $(BINR)/time_console_inetd
+.PHONY: all clean
+
+all: $(EXECS)
+
+$(word 1, $(EXECS)): $(word 1, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(word 2, $(EXECS)): $(word 2, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(word 3, $(EXECS)): $(word 3, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(word 4, $(EXECS)): $(word 4, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(word 5, $(EXECS)): $(word 5, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(word 6, $(EXECS)): $(word 6, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $< -o $@
+
+$(word 1, $(DEBUG)): $(word 1, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $(GDBFLAGS) $< -o $@
+
+$(word 2, $(DEBUG)): $(word 2, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $(GDBFLAGS) $< -o $@
+
+$(word 3, $(DEBUG)): $(word 3, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $(GDBFLAGS) $< -o $@
+
+$(word 4, $(DEBUG)): $(word 4, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $(GDBFLAGS) $< -o $@
+
+$(word 5, $(DEBUG)): $(word 5, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $(GDBFLAGS) $< -o $@
+
+$(word 6, $(DEBUG)): $(word 6, $(SRC)) $(HDR_F)
+	$(CC) $(CFLAGS) $(GDBFLAGS) $< -o $@
 
 clean:
-	rm -rfv $(BINR)/*
+	rm -rfv *.out
 
-$(BINR)/sock_init: sock_init.c
-	gcc $< -o $@ $(CFLAGS)
-
-$(BINR)/time_console: time_console.c
-	gcc $< -o $@ $(CFLAGS)
-
-$(BINR)/time_server: time_server.c $(DEPS)
-	gcc $< -o $@ $(CFLAGS)
-
-$(BINR)/time_server_dual: time_server_dual.c $(DEPS)
-	gcc $< -o $@ $(CFLAGS)
-
-$(BINR)/time_server_ipv6: time_server_ipv6.c $(DEPS)
-	gcc $< -o $@ $(CFLAGS)
-
-$(BINR)/time_console_inetd: time_console_inetd.c
-	gcc $< -o $@ $(CFLAGS)
-
-debug:
-	gcc $(TARGET).c -o $(BINR)/$(TARGET) $(CFLAGS) $(DBGFLAGS)

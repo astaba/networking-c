@@ -3,6 +3,7 @@
 
 # Executables
 bin/
+*.out
 
 # Test
 public/

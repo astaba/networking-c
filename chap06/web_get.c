@@ -11,10 +11,9 @@ SOCKET connect_to_host(char *hostname, char *port);
 /**
  * @brief This function implement an HTTP web client.
  *
- * This client takes as input as URL. It then attempts to connect to the
- * host and retrieve the resource given by the URL. The program displays the
- * HTTP headers that are sent and received, and it attempts to parse out the
- * requested resource content from the HTTP response.
+ * This client takes as input a URL. It then attempts to connect to the a server
+ * and retrieve the requested resources. The program displays the HTTP headers
+ * sent and received, and it attempts to parse out the HTTP response body.
  * */
 int main(int argc, char *argv[]) {
 
@@ -44,14 +43,14 @@ int main(int argc, char *argv[]) {
   SOCKET server = connect_to_host(hostname, port);
   send_request(server, hostname, port, path);
 
-  // Set timeout start
+  // Set request timeout start
   const clock_t start_time = clock();
 // Define variables for bookkeeping while receiving and parsing HTTP response.
-/* #define RESPONSE_8K (8 * 1024) */
-#define RESPONSE_32K (32 * 1024)
+/* #define RESPONSE_SIZE (8 * 1024) */
+#define RESPONSE_SIZE (32 * 1024)
   /* Statically point to the beginning of the buffer the server response is
    * recursively read into by split TCP packet (over server chunks). */
-  char *response = (char *)calloc((RESPONSE_32K + 1), sizeof(char));
+  char *response = (char *)calloc((RESPONSE_SIZE + 1), sizeof(char));
   if (!response) {
     perror("Memory allocation failed.");
     exit(EXIT_FAILURE);
@@ -63,9 +62,9 @@ int main(int argc, char *argv[]) {
    * dynamically update the position of the remaining body chunks to read */
   char *meta = NULL;
   /* Statically point to the last unused byte in the response buffer */
-  char *end = response + RESPONSE_32K;
+  char *end = response + RESPONSE_SIZE;
   /* Dynamically tracks the changing position to read the response body, once
-   * per chunk or length */
+   * per chunk or length (each could need many packets to complete) */
   char *body = NULL;
   /* If you recall, the HTTP response body length can be determined by a few
    * different methods. We define an enumeration to list the method types, and
@@ -91,6 +90,10 @@ int main(int argc, char *argv[]) {
     FD_ZERO(&readfds);
     FD_SET(server, &readfds);
 
+    // Without this "timeout" struct, in the event the server stops sending data
+    // for any reason the select() function will block, effectively freezing the
+    // application: preventing the app from servicing any additinal task and
+    // worse, preempting the TIMEOUT/clock() mechanism.
     struct timeval timeout;
     timeout.tv_sec = 0;       // holds seconds
     timeout.tv_usec = 200000; // holds microseconds
@@ -107,12 +110,13 @@ int main(int argc, char *argv[]) {
         if (encoding == connectionClosed && body) {
           printf("%.*s", (int)(end - body), body);
         }
-        /* Actually the next statement is a lame justification to the fact that
-         * this client is the one who intend on shutting down the connection
-         * because it doesn't support body length indicator other than
-         * 'Content-Length' and 'Transfer-Encoding', consequently, as a result
-         * of the 'Connection: close' request header the server will immediately
-         * close the connection. */
+        /* Actually the next statement is a lame justification to the fact that,
+         * after receiving response headers and first body chunk without body
+         * length indicator of any sort, this client is the one who intend on
+         * shutting down the connection because it doesn't support body length
+         * indicator other than 'Content-Length' and 'Transfer-Encoding',
+         * consequently, as a result of the 'Connection: close' request header
+         * the server will immediately close the connection. */
         printf("\nConnection closed by peer.\n");
         break;
       }
@@ -166,7 +170,7 @@ int main(int argc, char *argv[]) {
         if (encoding == length) {
           if (pkt - body >= remaining) {
             printf("%.*s", remaining, body);
-            break;
+            break; // break out of while(1)
           }
 
         } else if (encoding == chunked) {
@@ -180,7 +184,7 @@ int main(int argc, char *argv[]) {
               } else
                 /* Then the received chunk doesn't have any line with hexa
                  * number and we need to break out to call recv() again */
-                break;
+                break; // break out of do-while
             }
             if (remaining && pkt - body >= remaining) {
               printf("%.*s", remaining, body);

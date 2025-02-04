@@ -10,9 +10,9 @@
 /* The socket API is blocking by nature. When you call functions like accept(),
  * recv() or send() the whole program will block waiting for them to return.
  * This behavior is a non-starter when you need to service multiple in-coming
- * connections. One solution to cope with this blocking behaviour is implementing
- * multi threading/process techniques with the fork() function. Obviously this
- * solution only applies to Unix mike systems. */
+ * connections. One solution to cope with this blocking behaviour is
+ * implementing multi threading/process techniques with the fork() function.
+ * Obviously this solution only applies to Unix mike systems. */
 int main(void) {
 
   // Configure local address

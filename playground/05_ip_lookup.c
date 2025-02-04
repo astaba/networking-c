@@ -1,6 +1,7 @@
 /* 05_ip_lookup.c */
 
 #include "../chap05/chap05.h"
+#include <string.h>
 
 #ifndef AI_ALL
 #define AI_ALL 0x0100
@@ -42,9 +43,12 @@ int main(int argc, char *argv[]) {
   printf("Remote address is:\n");
   struct addrinfo *address = peer_address;
   do {
+    struct sockaddr_storage addr_storage;
+    memcpy(&addr_storage, address->ai_addr, address->ai_addrlen);
+
     char address_buffer[100];
-    getnameinfo(address->ai_addr, address->ai_addrlen, address_buffer,
-                sizeof(address_buffer), 0, 0, NI_NUMERICHOST);
+    getnameinfo((struct sockaddr *)&addr_storage, address->ai_addrlen,
+                address_buffer, sizeof(address_buffer), 0, 0, NI_NUMERICHOST);
     printf("\t%s\n", address_buffer);
   } while ((address = address->ai_next));
 
