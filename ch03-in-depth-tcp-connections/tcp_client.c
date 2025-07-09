@@ -1,12 +1,6 @@
-/* tcp_client.c */
+// ch03-in-depth-tcp-connections/tcp_client.c
 
-// clang-format off
 #include "chap03.h"
-#if defined(_WIN32)
-  #include <conio.h>
-#endif
-// clang-format on
-
 /**
  * @brief Entry point of the TCP client application.
  *
@@ -24,10 +18,11 @@
  *         error message on failure.
  */
 int main(int argc, char *argv[]) {
-
 #if defined(_WIN32)
-  WSADATA d;
-  if (WSAStartup(MAKEWORD(2, 2), &d)) {
+  WSADATA WSAData;
+  unsigned int wVersionRequested = MAKEWORD(2, 2);
+  int wsa_error = WSAStartup(wVersionRequested, &WSAData);
+  if (wsa_error) {
     fprintf(stderr, "Failed to initialize Winsock.\n");
     exit(EXIT_FAILURE);
   }
@@ -42,10 +37,16 @@ int main(int argc, char *argv[]) {
   struct addrinfo hints;
   memset(&hints, 0, sizeof(hints));
   hints.ai_socktype = SOCK_STREAM;
-
   struct addrinfo *peer_address;
-  if (getaddrinfo(argv[1], argv[2], &hints, &peer_address)) {
-    fprintf(stderr, "getaddrinfo() failed. (%d)\n", GETSOCKETERRNO());
+  // INFO: We check the return value of getaddrinfo() because we're resolving a
+  // remote address, typically using DNS or local hostname configuration. If
+  // this lookup fails, the client cannot proceed to connect. Unlike passive
+  // local resolution for binding (e.g., with NULL host), this actively depends
+  // on external or system-level resolution that may fail due to invalid input,
+  // unreachable DNS, or misconfigured system settings.
+  int gai_err = getaddrinfo(argv[1], argv[2], &hints, &peer_address);
+  if (gai_err) {
+    fprintf(stderr, "getaddrinfo() failed: %s\n", gai_strerror(gai_err));
     exit(EXIT_FAILURE);
   }
 
@@ -62,15 +63,17 @@ int main(int argc, char *argv[]) {
   SOCKET socket_peer;
   socket_peer = socket(peer_address->ai_family, peer_address->ai_socktype,
                        peer_address->ai_protocol);
-  if (!ISVALIDSOCKET(socket_peer)) {
-    fprintf(stderr, "socket() failed. (%d)\n", GETSOCKETERRNO());
+  if (BAD_SOCKET(socket_peer)) {
+    REPORT_SOCKET_ERROR("socket() failed");
     exit(EXIT_FAILURE);
   }
 
-  // Bind new socket with remote address and try connecting
-  printf("Connecting...\n");
+  // INFO: Like bind(), connect() associates a socket with a specific address.
+  // Furthermore connect() also initiates a TCP handshake with the remote host,
+  // ensuring client side establishes a stateful connection.
+  printf("Connection...\n");
   if (connect(socket_peer, peer_address->ai_addr, peer_address->ai_addrlen)) {
-    fprintf(stderr, "connect() failed. (%d)\n", GETSOCKETERRNO());
+    REPORT_SOCKET_ERROR("connect() failed");
     exit(EXIT_FAILURE);
   }
   freeaddrinfo(peer_address);
@@ -85,26 +88,28 @@ int main(int argc, char *argv[]) {
 #if !defined(_WIN32)
     FD_SET(fileno(stdin), &readfds);
 #endif
-
+    // INFO: On non-Windows system select() can be used to monitor for terminal
+    // input on stdin == 0. Therefore we must unlock the blocking select() by
+    // passing a timeout to go and check for terminal input on the Windows
+    // _kbhit() on each iteration.
     struct timeval timeout;
     timeout.tv_sec = 0;
     timeout.tv_usec = 100000;
 
     if (select(socket_peer + 1, &readfds, 0, 0, &timeout) < 0) {
-      fprintf(stderr, "select() failed. (%d)\n", GETSOCKETERRNO());
+      REPORT_SOCKET_ERROR("select() failed");
       exit(EXIT_FAILURE);
     }
 
     if (FD_ISSET(socket_peer, &readfds)) {
       char read_buf[4096];
-      int bytes_received = recv(socket_peer, read_buf, sizeof(read_buf), 0);
-      if (bytes_received < 1) {
+      int bytes_recv = recv(socket_peer, read_buf, sizeof(read_buf), 0);
+      if (bytes_recv < 1) {
         printf("Connection closed by peer.\n");
         break;
       }
 
-      printf("Received (%d bytes) ->>\n%.*s\n<<-\n", bytes_received,
-             bytes_received, read_buf);
+      printf("Received (%d byted):\n%.*s\n", bytes_recv, bytes_recv, read_buf);
     }
 
 #if defined(_WIN32)
@@ -113,6 +118,8 @@ int main(int argc, char *argv[]) {
     if (FD_ISSET(0, &readfds)) {
 #endif
       char read_buf[4096];
+      // To match this if{} condition on linux:
+      // press <C-D> without preceding input
       if (fgets(read_buf, sizeof(read_buf), stdin) == NULL) {
         printf("Connection terminated for input error.\n");
         break;
@@ -128,7 +135,6 @@ int main(int argc, char *argv[]) {
 #if defined(_WIN32)
   WSACleanup();
 #endif
-
   printf("Finished.\n");
   return EXIT_SUCCESS;
 }

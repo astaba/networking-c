@@ -1,5 +1,59 @@
 # Network programming
 
+## 🔄 Ch03 WSL ↔ Windows Networking Reference
+
+Getting the right **hostname (i.e. local IP address)** from either sides.
+
+### 🧭 Connecting to Windows server
+
+####  From Windows client
+
+> ✅ Using the loopback local IP at `127.0.0.1` or `0.0.0.0` is enough with:
+
+  ```
+  localhost <port>
+  ```
+
+####  From WSL client
+
+> ✅ To connect from WSL client, WSL `localhost` loops back to WSL the same as Windows' do within Windows. So, to connect to Windows local network from within WSL you must connect to Windows `localhost` which is WSL `gateway` from WSL stand point and is given by:
+
+  - 🔹 **Windows CLI**: check the WSL section in  
+    ```
+    ipconfig
+    ```
+  - 🔹 **WSL CLI**: look for the `default` line in  
+    ```
+    ip route
+    ```
+
+---
+
+### 🧭 Connecting to WSL server
+
+####  From WSL client
+
+> ✅ Using the loopback local IP at `127.0.0.1` or `0.0.0.0` is enough with:
+
+  ```
+  localhost <port>
+  ```
+
+####  From Windows client
+
+- ✅ To connect to WSL `localhost` from Windows, Windows client must connect to WSL local IP address within WSL local network and it is given by the `eth0` section of either of the following commands:
+
+  - 🔹 **WSL CLI**:
+    ```
+    ip address
+    ```
+    or  
+    ```
+    ip route
+    ```
+
+---
+
 ## DNS
 
 I understand how the interplay of recursion and the `return` statement in this function can be confusing. Let's break it down step by step:

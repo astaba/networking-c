@@ -3,6 +3,7 @@
 
 # Executables
 bin/
+*.o
 *.out
 
 # Test
@@ -11,3 +12,5 @@ private/
 
 # GNU Debugger
 .gdb*
+
+/**/sandbox*.[ch]
