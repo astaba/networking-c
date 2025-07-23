@@ -1,160 +1,7 @@
-/* dns_query.c */
+// ch05-hostname-resolution-and-dns/dns_query/print_dns_msg.c
 
-#include "chap05.h"
-
-void print_dns_message(const char *message, int msg_length);
-const unsigned char *print_name(const unsigned char *msg,
-                                const unsigned char *p,
-                                const unsigned char *end);
-
-/**
- * @brief The main function is the entry point for this application.
- * @param argc The number of command line arguments.
- * @param argv The command line arguments.
- * @return EXIT_SUCCESS if successful, EXIT_FAILURE otherwise.
- *
- * @desc This program takes a hostname and a record type as command line
- * arguments, performs a DNS query to the Google public DNS server at 8.8.8.8,
- * and prints the DNS response message.
- *
- * Note that UDP is not always reliable. If our DNS query is lost in transit,
- * then dns_query hangs while waiting forever for a reply that never comes.
- * This could be fixed by using the function to time out and retry. select()
- */
-int main(int argc, char *argv[]) {
-
-  // Check if the user provided a hostname and record type
-  if (argc < 3) {
-    printf("Usage:\n\tdns_query hostname type\n");
-    printf("Example:\n\tdns_query example.com aaaa\n");
-    exit(EXIT_SUCCESS);
-  }
-
-  // Make sure the hostname isn't too long
-  if (strlen(argv[1]) > 255) {
-    fprintf(stderr, "Hostname too long.\n");
-    exit(EXIT_FAILURE);
-  }
-
-  // Try to interpret and read in the record type requested by the user
-  unsigned char type;
-  if (strcmp(argv[2], "a") == 0) {
-    type = 1;
-  } else if (strcmp(argv[2], "mx") == 0) {
-    type = 15;
-  } else if (strcmp(argv[2], "txt") == 0) {
-    type = 16;
-  } else if (strcmp(argv[2], "aaaa") == 0) {
-    type = 28;
-  } else if (strcmp(argv[2], "any") == 0) {
-    // All cached record: unlikely to yield them all du to UPD unreliability
-    type = 255;
-  } else {
-    fprintf(stderr,
-            "Unknown type '%s'. Use: 'a', 'aaaa', 'mx', 'txt', or 'any'.\n",
-            argv[2]);
-    exit(EXIT_FAILURE);
-  }
-
-  // Initialize Winsock
-#if defined(_WIN32)
-  WSADATA WSAData;
-  unsigned short wVersionRequested = MAKEWORD(2, 2);
-  int wsaerr = WSAStartup(wVersionRequested, &WSAData);
-  if (wsaerr) {
-    fprintf(stderr, "Failed to initialize Winsock. The dll not found.\n");
-    exit(EXIT_FAILURE);
-  } else {
-    printf("The dll found.\n");
-    printf("The Status: %s\n", WSAData.szSystemStatus);
-  }
-#endif
-
-  // Configure DNS address
-  printf("Configuring remote address...\n");
-  struct addrinfo hints;
-  memset(&hints, 0, sizeof(hints));
-  hints.ai_socktype = SOCK_DGRAM;
-  struct addrinfo *peer_address;
-  if (getaddrinfo("8.8.8.8", "53", &hints, &peer_address)) {
-    fprintf(stderr, "getaddrinfo() failed. (%d)\n", GETSOCKETERRNO());
-    return EXIT_FAILURE;
-  }
-
-  // Create socket
-  printf("Creating socket...\n");
-  SOCKET socket_peer;
-  socket_peer = socket(peer_address->ai_family, peer_address->ai_socktype,
-                       peer_address->ai_protocol);
-  if (!ISVALIDSOCKET(socket_peer)) {
-    fprintf(stderr, "socket() failed. (%d)\n", GETSOCKETERRNO());
-    return 1;
-  }
-
-  // Construct the data for the DNS message starting with the 12-byte header
-  char query[1024] = {
-      0xAB, 0xCD, /* ID */
-      0x01,       /* Bitwise Flags: (1)qr, (4)opcode, (1)aa, (1)tc, (1)rd */
-      0x00,       /* Reponse-type: RCODE */
-      0x00, 0x01, /* Questions: QDCOUNT */
-      0x00, 0x00, /* Answer RRs: ANCOUNT */
-      0x00, 0x00, /* Authority RRs: NSCOUNT */
-      0x00, 0x00, /* Additional RRs: ARCOUNT */
-  };
-
-  // Append user's desired hostname into the encoding of the DNS query message
-  char *p = query + 12;
-  char *h = argv[1];
-
-  while (*h) {
-    char *len = p;
-    p++;
-    if (h != argv[1]) // Then we are past the first label and we need to
-      ++h;            // skip the point reached in the preceding iteration
-    while (*h && *h != '.')
-      *p++ = *h++;
-    *len = p - (len + 1);
-  }
-  *p++ = '\0';
-
-  // Tail the encoding of the DNS query message with question type and class
-  *p++ = 0x00;
-  *p++ = type; /* QTYPE */
-  *p++ = 0x00;
-  *p++ = 0x01; /* QCLASS */
-
-  // Calculate the query size
-  const int query_size = p - query;
-
-  // Transmit the DNS query to the DNS server
-  int bytes_sent = sendto(socket_peer, query, query_size, 0,
-                          peer_address->ai_addr, peer_address->ai_addrlen);
-  printf("Send %d bytes.\n", bytes_sent);
-
-  // HACK: For debugging purposes display the query just sent to make sure there
-  // was no mistake in query encoding
-  print_dns_message(query, query_size);
-
-  // Now that the query has been sent, we await a DNS response message using
-  // recvfrom(). In a practical program, you may want to use select() here to
-  // time out. It could also be wise to listen for additional messages in the
-  // case that an invalid message is received first
-  char read[1024];
-  int bytes_received = recvfrom(socket_peer, read, 1024, 0, 0, 0);
-  printf("Received %d bytes.\n", bytes_received);
-  print_dns_message(read, bytes_received);
-  printf("\n");
-
-  // Cleanup routines
-  freeaddrinfo(peer_address);
-  CLOSESOCKET(socket_peer);
-
-#if defined(_WIN32)
-  WSACleanup();
-#endif
-
-  return EXIT_SUCCESS;
-}
+#include "../chap05.h"
+#include "print_api.h"
 
 /**
  * @brief print a dns message.
@@ -189,16 +36,17 @@ void print_dns_message(const char *message, int msg_length) {
   }
   printf("\n");
 
-  // NOTE: in the subsequent comments bits are numerically qualified in the big
-  // endian order.
+  // NOTE: In the subsequent comments and code statements bits and bytes are
+  // numerically qualified accroding to DNS Protocol big-endiannes not the OS
+  // little-endianness.
 
   // Print the message id in a nice hexadecimal format
   // message ID -> 1st and 2nd bytes of the message
-  printf("ID = %0x %0x\n", msg[0], msg[1]);
+  printf("ID = %#0x%0x\n", msg[0], msg[1]);
 
   // Next, we get the qr bit from the message header. this bit is the most
-  // significant bit of msg[2]. we use the bitmask 0x80 to see whether it is
-  // set which it is a response otherwise it is a query.
+  // significant bit of msg[2]. we use the bitmask 0x80 to test whether it is
+  // set (a response) or not (a query).
   // QR -> 1st bit in the 3rd byte of the message
   const int qr = (msg[2] & 0x80) >> 7;
   printf("QR = %d %s\n", qr, qr ? "response" : "query");
@@ -229,8 +77,12 @@ void print_dns_message(const char *message, int msg_length) {
   // Finally, we can read in rcode for response-type messages. Since rcode can
   // have several different values, we use a switch statement to print them.
   if (qr) { // if it is a response
+    // ra -> first most significant bit in the 4th byte of the message
+    const int ra = (msg[3] & 0x80) >> 7;
+    printf("RA = %d %s\n", ra, ra ? "recursion available" : "");
+
     // rcode -> 3 least significant bits in the 4th byte of the message
-    const int rcode = msg[3] & 0x07;
+    const int rcode = msg[3] & 0x0F;
     printf("RCODE = %d ", rcode);
     // clang-format off
     switch (rcode) {
@@ -375,7 +227,44 @@ void print_dns_message(const char *message, int msg_length) {
         printf("\n");
 
       } else if (type == 16) { /* TXT Record */
-        printf("\t%7s '%.*s'\n", "TXT:", rdlen - 1, p + 1);
+        // WARN: The following code snippet to parse TXT record does not account
+        // for a TXT made up of more that one {[length_byte][string]}
+        // printf("\t%7s '%.*s'\n", "TXT:", rdlen - 1, p + 1);
+        // INFO: According to RFC 1035, Section 3.3.14 (TXT RDATA format) a
+        // single TXT record's RDATA can legitimately look like this:
+        // [length_byte1][string1][length_byte2][string2][length_byte3][string3]...
+
+        printf("\t%7s ", "TXT:");
+        const unsigned char *sub_string = p; // Local scope reading pointer
+        // Total bytes left to parse from the reading pointer within RDATA
+        int bytes_remaining = rdlen;
+
+        while (bytes_remaining > 0) {
+          if (sub_string >= end) { // Basic bounds check for current part
+            fprintf(stderr, "Error: TXT record data unexpectedly ends.\n");
+            exit(EXIT_FAILURE);
+          }
+          const int string_len = sub_string[0]; // current string length byte
+          sub_string++;      // Skip the length byte to the actual string data
+          bytes_remaining--; // Decrement bytes count accordingly
+
+          if (string_len > bytes_remaining) { // bound check
+            fprintf(stderr, "Error: TXT record string length exceeds remaining "
+                            "RDLENGTH.\n");
+            exit(EXIT_FAILURE);
+          }
+
+          printf("'%.*s'", string_len, sub_string); // Print the string
+
+          sub_string += string_len;      // Advance reading pointer accordingly
+          bytes_remaining -= string_len; // Decrement bytes count accordingly
+          if (bytes_remaining > 0) {
+            // Then TXT record has another [length_byte][string]
+            printf(" "); // Add a separator between TXT record strings
+          }
+        }
+        printf("\n"); // Newline after all strings are printed
+        // End of TXT Record parsing
 
       } else if (type == 5) { /* CNAME Record */
         printf("\t%7s ", "CNAME:");
@@ -391,69 +280,4 @@ void print_dns_message(const char *message, int msg_length) {
     printf("There is some unread data left over.\n");
   }
   printf("\n");
-}
-
-/**
- * @brief: Print a DNS name.
- * @param msg: a pointer to the beginning of the message
- * @param p: a pointer to the name to print
- * @param end: a pointer to one past the end of the message.
- *
- * @desc: This function takes a pointer to the beginning of a DNS message and
- * prints out the DNS name that is stored in the message at the position p. The
- * end parameter is required so that we can check that we're not reading past
- * the end of the received message. The msg parameter is required for the same
- * reason, but also so that we can interpret name pointers.
- * */
-const unsigned char *print_name(const unsigned char *msg,
-                                const unsigned char *p,
-                                const unsigned char *endafter) {
-  // Check that a proper name is even possible. Because a name should consist of
-  // at least a length and some text, we can return an error if p is already
-  // within two characters of the end
-  // We need to access at least one byte pointed to by p and another one bytes
-  // before the end.
-  if (p + 2 > endafter) {
-    fprintf(stderr, "End of message.\n");
-    exit(EXIT_FAILURE);
-  }
-
-  // We then check to see if p points to a name pointer. If it does, we
-  // interpret the pointer and call print_name recursively to print the name
-  // that is pointed to.
-  if ((*p & 0xC0) == 0xC0) {
-    const int k = ((*p & 0x3F) << 8) + p[1];
-    p += 2;
-    printf(" (pointer: %d) ", k);
-    print_name(msg, msg + k, endafter);
-    return p;
-
-  } else { // The name is not pointer: print it one lable at a time.
-    const int len = *p++;
-    // WARN: Previous checks may validate the start of a label, but the label
-    // length is dynamic and could push `p + len + 1` beyond `end`, especially
-    // if the length byte is corrupted or manipulated.
-    // The next bound check ensures that there are enough bytes remaining in the
-    // message to read:
-    // -  the purported label length;
-    // -  and at least one byte for either the length of the next label or the
-    // message null terminator;
-    // protecting against unexpected input, corruption, or malicious attacks.
-    // Such checks are crucial for security and stability in network data
-    // parsing.
-    if (p + len + 1 > endafter) {
-      fprintf(stderr, "End of message.\n");
-      exit(EXIT_FAILURE);
-    }
-
-    printf("%.*s", len, p);
-    p += len;
-
-    if (*p) { // *p is either name length or name pointer
-      printf(".");
-      return print_name(msg, p, endafter);
-    } else {
-      return p + 1;
-    }
-  }
 }
