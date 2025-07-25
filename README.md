@@ -69,7 +69,7 @@ Getting the right **hostname (i.e. local IP address)** from either sides.
 | **OpenDNS** | `208.67.222.222` | `2620:0:ccc::2` |
 | | `208.67.220.220` | `2620:0:ccd::2` |
 
-### DNS Protocol Endiannness
+### DNS Protocol Endianness
 
 **WARNING:** OS little-endian vs DNS Protocol big-endian.
 
@@ -385,8 +385,8 @@ const response = {
   * **`header`**: The response header will match the query ID, set the QR flag to 1, and contain the counts for each section.
   * **`question`**: A response typically echoes the original query's question section(s).
   * **RESOURCE RECORD**:
-      * **"The 'Resource Record' field acts as a template for entries in the Answer, Authority, and Additional sections."**: **Absolutely correct\!** All three of these sections (Answer, Authority, Additional) are composed of Resource Records (RRs), and each RR follows the `name, type, class, ttl, rdlength, rdata` format. The `print_dns_message` function correctly iterates through `ancount + nscount + arcount` because they all share this common structure.
-      * **"These sections are repeatable... Answer: header.ancount times, Authority: header.nscount times, Additional: header.arcount times"**: **Yes, precisely\!** The `ANCOUNT`, `NSCOUNT`, and `ARCOUNT` fields in the header explicitly tell you how many such `RR` structures to expect in each respective section. Each of these counts can be zero or more.
+      * **"The 'Resource Record' field acts as a template for entries in the Answer, Authority, and Additional sections."**: All three of these sections (Answer, Authority, Additional) are composed of Resource Records (RRs), and each RR follows the `name, type, class, ttl, rdlength, rdata` format. The `print_dns_message` function correctly iterates through `ancount + nscount + arcount` because they all share this common structure.
+      * **"These sections are repeatable... Answer: header.ancount times, Authority: header.nscount times, Additional: header.arcount times"**: The `ANCOUNT`, `NSCOUNT`, and `ARCOUNT` fields in the header explicitly tell you how many such `RR` structures to expect in each respective section. Each of these counts can be zero or more.
 
 -----
 
