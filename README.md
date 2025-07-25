@@ -360,7 +360,7 @@ const response = {
     name : {/* if name; then any-bytes; else 2-byte compression pointer */},
     // The domain name to which this resource record pertains.
     // Can be a full name just as the query qname, commonly,
-    // a compression pointer (e.g., `0xC0XX`)
+    // a compression pointer (e.g., `0xC0XX`) as a back reference
     // to an earlier occurrence of the name in the message.
 
     // The type of resource data
