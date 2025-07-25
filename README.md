@@ -357,7 +357,7 @@ const response = {
     // Answer, Authority, and Additional sections repeatable n times:
     // n = header.ancount + header.nscount + header.arcount
 
-    name : {/* if name; then any-bytes; else 2-byte compression pointer */}
+    name : {/* if name; then any-bytes; else 2-byte compression pointer */},
     // The domain name to which this resource record pertains.
     // Can be a full name just as the query qname, commonly,
     // a compression pointer (e.g., `0xC0XX`)
