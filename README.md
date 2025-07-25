@@ -251,23 +251,21 @@ The DNS message always starts with a fixed 12-byte header. This header contains 
 ```JavaScript
 // JavaScript pseudocode to foster a mental model of the DNS Message Header Format
 
-const header : { // (6 x 16-bit == 12 bytes)
+const header = { // (6 x 16-bit == 12 bytes)
     // Transaction ID: identifier assigned by the query originator.
     // It is copied into the response to match queries with responses.
     id : 0x0000,         // (16-bit) e.g., 0x1234 for an example
 
     // Flags: A 16-bit field containing various control bits.
     // Each flag is typically represented by a single bit or a few bits.
-    flags : {            // ( bit flags adding up to 2 bytes)
-        qr     : 0b0,    // (1-bit) Query (0) or Response (1)
-        opcode : 0b0000, // (4-bit) Standard Query (0), Inverse Query (1), Status (2), etc.
-        aa     : 0b0,    // (1-bit) Authoritative Answer (1 if server is authority for the domain)
-        tc     : 0b0,    // (1-bit) TrunCation (1 if message was truncated due to length limits)
-        rd     : 0b0,    // (1-bit) Recursion Desired (1 if recursive query is requested)
-        ra     : 0b0,    // (1-bit) Recursion Available (1 if server supports recursion)
-        z      : 0b000,  // (3-bit) Reserved for future use (must be zero)
-        rcode  : 0b0000  // (4-bit) Response Code (0=No Error, 1=Format Error, 2=Server Failure, 3=Name Error, etc.)
-    },
+    qr     : 0b0,    // (1-bit) Query (0) or Response (1)
+    opcode : 0b0000, // (4-bit) Standard Query (0), Inverse Query (1), Status (2), etc.
+    aa     : 0b0,    // (1-bit) Authoritative Answer (1 if server is authority for the domain)
+    tc     : 0b0,    // (1-bit) TrunCation (1 means message truncated due to length limits. Resend query on TCP)
+    rd     : 0b0,    // (1-bit) Recursion Desired (1 if recursive query is requested)
+    ra     : 0b0,    // (1-bit) Recursion Available (1 if server supports recursion)
+    z      : 0b000,  // (3-bit) Reserved for future use (must be zero)
+    rcode  : 0b0000, // (4-bit) Response Code (0=No Error, 1=Format Error, 2=Server Failure, 3=Name Error, etc.)
 
     // Question Count: Number of entries in the Question section.
     qdcount : 0x0000, // (16-bit)
@@ -288,7 +286,7 @@ const header : { // (6 x 16-bit == 12 bytes)
       * **`qr` (Query/Response)**: 0 for a query, 1 for a response.
       * **`opcode`**: A 4-bit field specifying the type of query. Standard queries are `0`.
       * **`aa` (Authoritative Answer)**: Set to 1 in a response if the responding name server is an authority for the domain name in question.
-      * **`tc` (TrunCation)**: Set to 1 if the message was truncated due to length limits (e.g., if a UDP response exceeds 512 bytes).
+      * **`tc` (TrunCation)**: Set to 1 if the message was truncated due to length limits (e.g., if a UDP response exceeds 512 bytes). It is a prompt to resend to query on TCP.
       * **`rd` (Recursion Desired)**: Set to 1 in a query if the client wants the name server to perform a recursive query (i.e., resolve the name completely, even if it needs to contact other servers).
       * **`ra` (Recursion Available)**: Set to 1 in a response if the name server supports recursive queries.
       * **`z`**: A 3-bit field reserved for future use; always set to 0.
@@ -306,39 +304,39 @@ const header : { // (6 x 16-bit == 12 bytes)
 // JavaScript pseudocode to foster a mental model of the DNS Query Format
 
 const query = {
-    header : {...}, // (12-byte)
+    // HEADER
+    header : {/* 12-byte 13 fields and bit flags */},
 
-    // The 'question' field is theoretically repeatable header.qdcount times,
-    // but in practice, almost all DNS clients send queries with only 1 question.
-    question : {
-        // The domain name being queried, represented as a sequence of
-        // length-prefixed labels ending with a null byte (e.g., `3www6google3com0`).
-        // No compression pointers in queries and the byte size is variable
-        qname : {
-            '3', 'w', 'w', 'w',
-            '6', 'g', 'o', 'o', 'g', 'l', 'e',
-            '3', 'c', 'o', 'm',
-            '\0',
-        },
+    // The 'QUESTION' part made up of qname, qtype and qclass is theoretically
+    // repeatable header.qdcount times, but in practice,
+    // almost all DNS clients send queries with only 1 question.
 
-        // e.g. type:
-        // 1 for A (IPv4 address record),
-        // 28 for AAAA (IPv6 address record),
-        // 15 for MX (mail exchange record),
-        // 16 for TXT (Text record),
-        // 5 for CNAME (canonical name),
-        // 255 for * (any).
-        qtype : 0x0000,    // (2-byte) type of the original query
+    // QUESTION
+    // The domain name being queried, represented as a sequence of
+    // length-prefixed labels ending with a null byte (e.g., `3www6google3com0`).
+    // No compression pointers in queries and the byte size is variable
+    qname : [
+        '3', 'w', 'w', 'w',
+        '6', 'g', 'o', 'o', 'g', 'l', 'e',
+        '3', 'c', 'o', 'm',
+        '\0',
+    ],
 
-        // The class of the data (e.g., 1 for IN - Internet).
-        qclass : 0x0000    // (2-byte) class of the original query
-    }
+    qtype : 0x0000,    // (2-byte) type of the original query e.g. type:
+    // 1 for A (IPv4 address record),
+    // 28 for AAAA (IPv6 address record),
+    // 15 for MX (mail exchange record),
+    // 16 for TXT (Text record),
+    // 5 for CNAME (canonical name),
+    // 255 for * (any).
+
+    qclass : 0x0000    // (2-byte) class of the original query
+    // The class of the data (e.g., 1 for IN - Internet).
 }
 ```
 
-  * **`header = {...}`**: Correct. This refers to the fixed 12-byte header structure described above.
-  * **`question = { "qname", "qtype", "qclass" }`**: Correct. This represents a single question entry.
-  * **"The 'question' field is theoretically repeatable... but in practice, almost all DNS clients send queries with only 1 question."**: This is a very insightful observation. While the DNS specification *allows* for `QDCOUNT` (Question Count in the header) to be greater than 1 (meaning multiple questions in a single query), in practice, almost all DNS clients send queries with only **one** question. It's theoretically possible, but rarely implemented.
+  * **`header`**: This refers to the fixed 12-byte header structure described above.
+  * **`question`**: This represents a single question entry. While the DNS specification *allows* for `QDCOUNT` (Question Count in the header) to be greater than 1 (meaning multiple questions in a single query), in practice, almost all DNS clients send queries with only **one** question. It's theoretically possible, but rarely implemented.
 
 -----
 
@@ -348,44 +346,45 @@ const query = {
 // JavaScript pseudocode to foster a mental model of the DNS Response Format
 
 const response = {
-    header : {...}, // (12-byte)
+    // HEADER
+    header : {/* 12-byte 13 fields and bit flags */},
 
     // follows the same specification as in the query
-    question : { "qname", "qtype", "qclass"}, // (variable byte size)
+    question : {/* any-byte qname + 2-byte qtype + 2-byte qclass  */},
 
+    // RESOURCE RECORD
     // The "Resource Record" field acts as a template for entries in the
     // Answer, Authority, and Additional sections repeatable n times:
     // n = header.ancount + header.nscount + header.arcount
-    ["RR"] : {      // (variable bytes)
-        // The domain name to which this resource record pertains.
-        // Can be a full name just as the query qname, commonly,
-        // a compression pointer (e.g., `0xC0XX`)
-        // to an earlier occurrence of the name in the message.
-        name : {...},      // (variable bytes)
 
-        // The type of resource data
-        type : 0x0000,     // (2-byte)
+    name : {/* if name; then any-bytes; else 2-byte compression pointer */}
+    // The domain name to which this resource record pertains.
+    // Can be a full name just as the query qname, commonly,
+    // a compression pointer (e.g., `0xC0XX`)
+    // to an earlier occurrence of the name in the message.
 
-        // The class of the data.
-        class : 0x0000,    // (2-byte)
+    // The type of resource data
+    type : 0x0000,     // (2-byte)
 
-        // Time To Live in seconds. How long the record can be cached.
-        ttl : 0x00000000,  // (4-byte)
+    // The class of the data.
+    class : 0x0000,    // (2-byte)
 
-        // The length of the RDATA field in bytes.
-        rdlength : 0x0000, // (2-byte)
+    // Time To Live in seconds. How long the record can be cached.
+    ttl : 0x00000000,  // (4-byte)
 
-        // The actual resource data. Its format depends on the TYPE field
-        // (e.g., 4 bytes for an IPv4 address if TYPE is A, another name if TYPE is CNAME or MX).
-        rdata : {...}     // (as many bytes as the integer value of rdlength)
-    }
+    // The length of the RDATA field in bytes.
+    rdlength : 0x0000, // (2-byte)
+
+    // The actual resource data. Its format depends on the TYPE field
+    // (e.g., 4 bytes for an IPv4 address if TYPE is A, another name if TYPE is CNAME or MX).
+    rdata : {/* rdlength-bytes */}
 }
 
 ```
 
-  * **`header = {...}`**: Correct. The response header will match the query ID, set the QR flag to 1, and contain the counts for each section.
-  * **`question = { "qname", "qtype", "qclass" }`**: Correct. A response typically echoes the original query's question section(s).
-  * **`["RR"] = { "name", "type", "class", "ttl", "rdlength", "rdata" }`**: This is an excellent way to abstract the Resource Record.
+  * **`header`**: The response header will match the query ID, set the QR flag to 1, and contain the counts for each section.
+  * **`question`**: A response typically echoes the original query's question section(s).
+  * **RESOURCE RECORD**:
       * **"The 'Resource Record' field acts as a template for entries in the Answer, Authority, and Additional sections."**: **Absolutely correct\!** All three of these sections (Answer, Authority, Additional) are composed of Resource Records (RRs), and each RR follows the `name, type, class, ttl, rdlength, rdata` format. The `print_dns_message` function correctly iterates through `ancount + nscount + arcount` because they all share this common structure.
       * **"These sections are repeatable... Answer: header.ancount times, Authority: header.nscount times, Additional: header.arcount times"**: **Yes, precisely\!** The `ANCOUNT`, `NSCOUNT`, and `ARCOUNT` fields in the header explicitly tell you how many such `RR` structures to expect in each respective section. Each of these counts can be zero or more.
 
